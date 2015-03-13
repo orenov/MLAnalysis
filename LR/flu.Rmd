@@ -1,0 +1,137 @@
+---
+title: "DETECTING FLU EPIDEMICS"
+author: "Oleksii Renov"
+date: "March 11, 2015"
+output: html_document
+---
+
+Flu epidemics constitute a major public health concern causing respiratory illnesses, hospitalizations, and deaths. According to the National Vital Statistics Reports published in October 2012, influenza ranked as the eighth leading cause of death in 2011 in the United States. Each year, 250,000 to 500,000 deaths are attributed to influenza related diseases throughout the world.
+
+The U.S. Centers for Disease Control and Prevention (CDC) and the European Influenza Surveillance Scheme (EISS) detect influenza activity through virologic and clinical data, including Influenza-like Illness (ILI) physician visits. Reporting national and regional data, however, are published with a 1-2 week lag.
+
+The Google Flu Trends project was initiated to see if faster reporting can be made possible by considering flu-related online search queries -- data that is available almost immediately.
+
+Load dataset and first overview.
+```{r}
+train <- read.csv("FluTrain.csv")
+str(train)
+summary(train)
+```
+
+Variables description:
+
++ "Week" - The range of dates represented by this observation, in year/month/day format.
++ "ILI" - This column lists the percentage of influenza-like illness (ILI) related physician visits for the corresponding week.
++ "Queries" - This column lists the fraction of queries that are ILI-related for the corresponding week, adjusted to be between 0 and 1 (higher values correspond to more ILI-related search queries).
+
+Extremal observations
+```{r}
+train[which.max(train$ILI), ]
+train[which.max(train$Queries), ]
+```
+
+Let's plot histogram of ILI.
+```{r, message=FALSE,warning=FALSE}
+library(ggplot2)
+ggplot(aes(x=ILI), data=train) + geom_histogram(binwidth =0.05)
+```
+
+Data is definitely right skewed. Let's plot log ILI versus Queries.
+
+```{r}
+ggplot(aes(y=log(ILI), x = Queries ), data=train) + geom_point()
+```
+There is a positive, linear relationship between log(ILI) and Queries.
+
+### Build model
+
+Let's build first simple model based on information we obtain before.
+
+```{r}
+fluTrend1 <- lm(log(ILI) ~ Queries, data= train)
+summary(fluTrend1)
+```
+
+For a single variable linear regression model, there is a direct relationship between the R-squared and the correlation between the independent and the dependent variables.
+
+```{r}
+cor(log(train$ILI), train$Queries)^2
+```
+
+### Performance on test set
+
+```{r}
+test <- read.csv("FluTest.csv")
+predTest1 <- exp(predict(fluTrend1, newdata=test))
+i <- which(test$Week == "2012-03-11 - 2012-03-17")
+predTest1[i]
+(test$ILI[i] - predTest1[i])/ test$ILI[i]
+```
+
+Find RMSE.
+
+```{r}
+RMSE = sqrt(mean((test$ILI - predTest1)^2))
+RMSE
+```
+
+### Building Time-Series Model
+
+The observations in this dataset are consecutive weekly measurements of the dependent and independent variables. Often, statistical models can be improved by predicting the current value of the dependent variable using the value of the dependent variable from earlier weeks.
+
+```{r}
+library(zoo)
+ILILag2 = lag(zoo(train$ILI), -2, na.pad=TRUE)
+train$ILILag2 = coredata(ILILag2)
+summary(train$ILILag2)
+```
+
+Let's investigate relationship.
+
+```{r, warning=FALSE, message=FALSE}
+ggplot(aes(y=log(ILI), x = log(ILILag2)), data= train) + geom_point()
+```
+
+New model building.
+
+```{r}
+fluTrend2 <- lm(log(ILI) ~ Queries + log(ILILag2), data=train)
+summary(fluTrend2)
+```
+
+All variables is signifficant, good news. R-squared is very high 0.9063.
+
+### Models Evaluation
+
+Transform test set.
+
+```{r}
+ILILag2 <- lag(zoo(test$ILI), -2, na.pad=TRUE)
+test$ILILag2 <- coredata(ILILag2)
+summary(test$ILILag2)
+```
+
+
+Filling NA's.
+
+```{r}
+test$ILILag2[1] <- train$ILI[416]
+test$ILILag2[2] <- train$ILI[417]
+```
+
+Compute RMSE using fluTrend2 model on test set.
+
+```{r}
+predicted <- exp(predict(fluTrend2, test))
+RMSE2 = sqrt(mean((test$ILI - predicted)^2))
+RMSE2
+```
+
+Compare RMSE for fluTrend1 and fluTrend2 model
+
+```{r}
+RMSE
+RMSE2
+```
+
+Clearly that second model is better.

@@ -1,0 +1,152 @@
+---
+title: "Reading test scores with Linear Regression"
+author: "Oleksii Renov"
+date: "March 11, 2015"
+output: html_document
+---
+
+The Programme for International Student Assessment (PISA) is a test given every three years to 15-year-old students from around the world to evaluate their performance in mathematics, reading, and science. This test provides a quantitative way to compare the performance of students from different parts of the world. In this homework assignment, we will predict the reading scores of students from the United States of America on the 2009 PISA exam.
+
+Load datasets
+
+```{r}
+train <- read.csv("pisa2009train.csv")
+test <- read.csv("pisa2009test.csv")
+```
+
+Variables description:
+
++ **grade**: The grade in school of the student (most 15-year-olds in America are in 10th grade)
++ **male**: Whether the student is male (1/0)
++ **raceeth**: The race/ethnicity composite of the student
++ **preschool**: Whether the student attended preschool (1/0)
++ **expectBachelors**: Whether the student expects to obtain a bachelor's degree (1/0)
++ **motherHS**: Whether the student's mother completed high school (1/0)
++ **motherBachelors**: Whether the student's mother obtained a bachelor's degree (1/0)
++ **motherWork**: Whether the student's mother has part-time or full-time work (1/0)
++ **fatherHS**: Whether the student's father completed high school (1/0)
++ **fatherBachelors**: Whether the student's father obtained a bachelor's degree (1/0)
++ **fatherWork**: Whether the student's father has part-time or full-time work (1/0)
++ **selfBornUS**: Whether the student was born in the United States of America (1/0)
++ **motherBornUS**: Whether the student's mother was born in the United States of America (1/0)
++ **fatherBornUS**: Whether the student's father was born in the United States of America (1/0)
++ **englishAtHome**: Whether the student speaks English at home (1/0)
++ **computerForSchoolwork**: Whether the student has access to a computer for schoolwork (1/0)
++ **read30MinsADay**: Whether the student reads for pleasure for 30 minutes/day (1/0)
++ **minutesPerWeekEnglish**: The number of minutes per week the student spend in English class
++ **studentsInEnglish**: The number of students in this student's English class at school
++ **schoolHasLibrary**: Whether this student's school has a library (1/0)
++ **publicSchool**: Whether this student attends a public school (1/0)
++ **urban**: Whether this student's school is in an urban area (1/0)
++ **schoolSize**: The number of students in this student's school
++ **readingScore**: The student's reading score, on a 1000-point scale
+
+### Dataset Overview
+
+```{r}
+str(train)
+```
+
+What is the average reading test score of males? females?
+
+```{r}
+tapply(train$readingScore, train$male, mean)
+```
+
+Which variables are missing data in at least one observation in the training set? 
+
+```{r}
+summary(train)
+```
+
+Free from NA's only publicSchool, urban, readingScore, male, grade.
+Let remove observations with NA's from train and test datsets.
+
+```{r}
+train <- na.omit(train)
+test <- na.omit(test)
+dim(train)
+dim(test)
+```
+
+### Data transformation
+
+Let's investigate variables which can be converted to factor variables.
+```{r}
+unique(train$grade)
+unique(train$male)
+unique(train$raceeth)
+```
+
+Grade is definitely ordered factor. Raceeth - unordered factor. Male - dummy variable.
+Let's set reference level for variable Raceeth - "White"
+```{r}
+train$raceeth = relevel(train$raceeth, "White")
+test$raceeth = relevel(test$raceeth, "White")
+```
+
+### Building a model
+
+```{r}
+LinReg <- lm(readingScore ~ ., data = train)
+summary(LinReg)
+```
+
+R-squared is too low, but this doesn't mean that model is poor. Let's compute RMSE.
+
+```{r}
+library(qpcR)
+RMSE(LinReg)
+```
+
+What is the meaning of the coefficient associated with variable raceethAsian?
+Predicted difference in the reading score between an Asian student and a white student who is otherwise identical.
+
+Let identify which variables are not signifficant with p-value equal to 0.05.
+
++ preschool
++ motherHS
++ motherWork
++ fatherHS
++ fatherWork
++ selfBornUS
++ motherBornUS
++ fatherBornUS
++ englishAtHome
++ minutesPerWeekEnglish
++ studentsInEnglish
++ schoolHasLibrary
++ urban
+
+Very interesting statistics.
+
+### Predicting on unseen data
+
+```{r}
+predicted <- predict(LinReg, test)
+summary(predicted)
+```
+Let's compute SSE and RMSE.
+
+```{r}
+SSE = sum((test$readingScore - predicted)^2)
+RMSE = sqrt(mean((test$readingScore - predicted)^2))
+SSE
+RMSE
+```
+
+Compute baseline prediction.
+```{r}
+baselinePrediction= mean(train$readingScore)
+baselinePrediction
+SST = sum((test$readingScore - baselinePrediction)^2)
+SST
+```
+
+Finnaly test R-squared.
+```{r}
+1 - SSE/SST
+```
+
+P.S. I should notice again that from poor R-squared don't imply evidence of bad model.
+

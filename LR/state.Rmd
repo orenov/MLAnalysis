@@ -1,0 +1,118 @@
+---
+title: "State Data with Linear Regeression"
+author: "Oleksii Renov"
+date: "March 13, 2015"
+output: html_document
+---
+
+In this post I'm going to examine the "state" dataset, which has data from the 1970s on all fifty US states. For each state, the dataset includes the population, per capita income, illiteracy rate, murder rate, high school graduation rate, average number of frost days, area, latitude and longitude, division the state belongs to,  region the state belongs to, and two-letter abbreviation.
+
+```{r}
+data(state)
+statedata = cbind(data.frame(state.x77), state.abb, state.area, state.center,  state.division, state.name, state.region)
+str(statedata)
+```
+
+Variables description:
+
++ *Population* - the population estimate of the state in 1975
++ *Income* - per capita income in 1974
++ *Illiteracy* - illiteracy rates in 1970, as a percent of the population
++ *Life.Exp* - the life expectancy in years of residents of the state in 1970
++ *Murder* - the murder and non-negligent manslaughter rate per 100,000 population in 1976 
++ *HS.Grad* - percent of high-school graduates in 1970
++ *Frost* - the mean number of days with minimum temperature below freezing from 1931–1960 in the capital or a large city of the state
++ *Area* - the land area (in square miles) of the state
++ *state.abb* - a 2-letter abreviation for each state
++ *state.area* - the area of each state, in square miles
++ *x* - the longitude of the center of the state
++ *y* - the latitude of the center of the state
++ *state.division* - the division each state belongs to (New England, Middle Atlantic, South Atlantic, East South Central, West South Central, East North Central, West North Central, Mountain, or Pacific)
++ *state.name* - the full names of each state
++ *state.region* - the region each state belong to (Northeast, South, North Central, or West)
+
+Simple data exploring.
+```{r}
+library(ggplot2)
+ggplot(aes(x=x,y=y), data=statedata) + geom_point()
+```
+
+Looks like US map.
+
+```{r}
+tapply(statedata$HS.Grad, statedata$state.region, mean)
+```
+
+```{r}
+ggplot(aes(y=Murder, x = state.region, fill = state.region), data=statedata) + geom_boxplot()
+```
+
+Highest median is in South Region. 
+
+Let's look more precisely at outlier for Notheas Region.
+
+```{r}
+noth <- subset(statedata, state.region=="Northeast")
+noth[which.max(noth$Murder),]
+```
+
+
+#### Initial model
+
+Building the model with all potential variables included (Population, Income, Illiteracy, Murder, HS.Grad, Frost, and Area) for predicting life expectancy.
+
+```{r}
+init <- lm(Life.Exp ~ Population + Income + Illiteracy + Murder + HS.Grad + Frost + Area, data = statedata)
+summary(init)
+```
+
+Relationship between income and life expectancy.
+
+```{r}
+ggplot(aes(x=Income, y=Life.Exp), data=statedata) + geom_point(pch = 15, size = 3, col= "blue") + stat_smooth(method="lm", se= FALSE, col = "red")
+```
+
+The model we built does not display the relationship we saw from the plot of life expectancy vs. income. (Multicollinearity)
+
+Let's iteratively remove unsignifficant variables.
+
+```{r}
+#remove Area
+iter1 <- lm(Life.Exp ~ Population + Income + Illiteracy + Murder + HS.Grad + Frost, data = statedata)
+summary(iter1)
+#remove Illiteracy
+iter2 <- lm(Life.Exp ~ Population + Income + Murder + HS.Grad + Frost, data=statedata)
+summary(iter2)
+#remove Income
+iter3 <- lm(Life.Exp ~ Population + Murder + HS.Grad + Frost, data=statedata)
+summary(iter3)
+```
+
+Let's analize fitted values using last model.
+
+```{r}
+predicted <- predict(iter3)
+statedata$predictedLE <- predicted
+#predicted
+head(sort(tapply(statedata$predicted, statedata$state.name, min)))
+#actual
+head(sort(tapply(statedata$Life.Exp, statedata$state.name, min)))
+
+#predicted
+head(sort(tapply(statedata$predicted, statedata$state.name, max), decreasing=TRUE))
+#actual
+head(sort(tapply(statedata$Life.Exp, statedata$state.name, max), decreasing = TRUE))
+```
+
+Absolute erros.
+
+```{r}
+sort(tapply(abs(statedata$Life.Exp-statedata$predictedLE), statedata$state.name, mean))
+```
+
+SessionInfo.
+
+```{r}
+sessionInfo()
+```
+

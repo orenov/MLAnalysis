@@ -1,0 +1,122 @@
+---
+title: "FORECASTING ELANTRA SALES"
+author: "Oleksii Renov"
+date: "March 13, 2015"
+output: html_document
+---
+
+An important application of linear regression is understanding sales. Consider a company that produces and sells a product. In a given period, if the company produces more units than how many consumers will buy, the company will not earn money on the unsold units and will incur additional costs due to having to store those units in inventory before they can be sold. If it produces fewer units than how many consumers will buy, the company will earn less than it potentially could have earned. Being able to predict consumer sales, therefore, is of first order importance to the company.
+
+I'm going to predict monthly sales of the Hyundai Elantra in the United States. The Hyundai Motor Company is a major automobile manufacturer based in South Korea. The Elantra is a car model that has been produced by Hyundai since 1990 and is sold all over the world, including the United States.
+
+```{r}
+df <- read.csv("elantra.csv")
+str(df)
+```
+
+Variables description:
+
++ **Month** = the month of the year for the observation (1 = January, 2 = February, 3 = March, ...).
++ **Year** = the year of the observation.
++ **ElantraSales** = the number of units of the Hyundai Elantra sold in the United States in the given month.
++ **Unemployment** = the estimated unemployment percentage in the United States in the given month.
++ **Queries** = a (normalized) approximation of the number of Google searches for "hyundai elantra" in the given month.
++ **CPI_energy** = the monthly consumer price index (CPI) for energy for the given month.
++ **CPI_all** = the consumer price index (CPI) for all products for the given month; this is a measure of the magnitude of the prices paid by consumer households for goods and services (e.g., food, clothing, electricity, etc.).
+
+Split the data set into training and testing sets as follows: place all observations for 2012 and earlier in the training set, and all observations for 2013 and 2014 into the testing set.
+
+```{r}
+train <- subset(df, Year <= 2012)
+test <- subset(df, Year > 2012)
+dim(train)
+dim(test)
+```
+
+Build a linear regression model to predict monthly Elantra sales using Unemployment, CPI_all, CPI_energy and Queries as the independent variables.
+
+```{r}
+firstModel <- lm(ElantraSales ~ Unemployment + CPI_all + CPI_energy + Queries, data = train)
+summary(firstModel)
+```
+
+Interesting fact that no one variable is signifficant with p-value = 0.1.
+Let's plot simple scatter plot of salces.
+```{r}
+library(ggplot2)
+ggplot(aes(y=ElantraSales,x=1:length(ElantraSales)), data=train) + geom_point() + geom_line()
+```
+
+Clear seasonality.
+To incorporate the seasonal effect due to the month, build a new linear regression model that predicts monthly Elantra sales using Month as well as Unemployment, CPI_all, CPI_energy and Queries.
+
+```{r}
+secondModel <- lm(ElantraSales ~ Month + Unemployment + CPI_all + CPI_energy + Queries, data=train)
+summary(secondModel)
+```
+
+Clearly second model is worse than first due to decreasing of adjusted R-squared and no stronger signifficant of any variable.
+There is something wrong with model. Month is discrete variable. Let's convert it to the ordered factor and build new model.
+
+```{r}
+train$MonthFactor <- as.factor(train$Month)
+thirdModel <- lm(ElantraSales ~ MonthFactor + Unemployment + CPI_all + CPI_energy + Queries, data=train)
+summary(thirdModel)
+```
+
+Model is much better.
+
+#### Multicolinearity
+
+Compute few correlations
+```{r}
+#CPI_energy
+cor(train$CPI_energy, train$Unemployment)
+cor(train$CPI_energy, train$Queries)
+cor(train$CPI_energy, train$CPI_all)
+cor(train$CPI_energy, train$Month)
+#Queries
+cor(train$Queries, train$Unemployment)
+cor(train$Queries, train$CPI_energy)
+cor(train$Queries, train$CPI_all)
+cor(train$Queries, train$Month)
+```
+
+I'm going to do iteratively removing of variables, one at a time. Remove the variable with the highest p-value (i.e., the least statistically significant variable) from the model. (p-value = 0.10)
+
+```{r}
+summary(thirdModel)
+#remove Queries
+iter1 <- lm(ElantraSales ~ MonthFactor + Unemployment + CPI_energy + CPI_all, data=train)
+summary(iter1)
+```
+
+All variables are signifficant in iter1 model.
+
+#### Testing on unseen data
+
+```{r}
+test$MonthFactor <- as.factor(test$Month)
+predicted <- predict(iter1, test)
+SSE <- sum((predicted - test$ElantraSales)^2)
+SSE
+baselinePrediction <- mean(train$ElantraSales)
+SST <- sum((test$ElantraSales - baselinePrediction)^2)
+SST
+
+RS = 1 - SSE/SST
+RS
+
+w <- which.max(abs(predicted-test$ElantraSales))
+test[w,]
+
+```
+
+Plot predicted vs real values.
+
+```{r}
+ggplot(aes(y=ElantraSales, x = 1:length(ElantraSales)), data = test) + geom_line(col="red") + geom_point(pch = 15, col = "red", size = 3) + geom_line(aes(y=predicted, x = 1:length(predicted)), col = "blue") + geom_point(aes(y=predicted, x=1:length(predicted)), pch = 15, col = "blue", size= 3)
+```
+
+
+

@@ -1,0 +1,127 @@
+---
+title: "Climate Change With Linear Regression"
+author: "Oleksii Renov"
+date: "March 11, 2015"
+output: html_document
+---
+
+In this small article I'll try to study the relationship between average global temperature and several other factors.
+
+The data contains information from May 1983 to December 2008. 
+
+```{r}
+df <- read.csv("climate_change.csv")
+str(df)
+```
+
+The variables description is next:
+
+1.  Year: the observation year.
+2.  Month: the observation month.
+3.  Temp: the difference in degrees Celsius between the average global temperature in that period and a reference value. 
+4.  CO2, N2O, CH4, CFC.11, CFC.12: atmospheric concentrations of carbon dioxide (CO2), nitrous oxide (N2O), methane  (CH4), trichlorofluoromethane (CCl3F; commonly referred to as CFC-11) and dichlorodifluoromethane (CCl2F2; commonly referred to as CFC-12), respectively.
+5.  Aerosols: the mean stratospheric aerosol optical depth at 550 nm.
+6.  TSI: the total solar irradiance (TSI) in W/m2.
+7.  MEI: multivariate El Nino Southern Oscillation index (MEI).
+
+### Creating First Model
+
+I'm going to split the data into a training set, consisting of all the observations up to and including 2006, and a testing set consisting of the remaining years.
+
+Next, build a linear regression model to predict the dependent variable Temp, using MEI, CO2, CH4, N2O, CFC.11, CFC.12, TSI, and Aerosols as independent variables.
+
+```{r}
+train <- subset(df, df$Year <= 2006)
+test <- subset(df, df$Year > 2006)
+
+firstModel <- lm (Temp ~ MEI + CO2 + CH4 + N2O + CFC.11 + CFC.12 + TSI + Aerosols, data = train)
+summary(firstModel)
+```
+
+I should notice about R-squared for this model equal to 0.7509.
+
+### Select signifficant variables from current model
+
+Let list variables from mode which are signifficant in this model with p-value equal .05.
+
++ MEI
++ CO2
++ CFC.11
++ CFC.12
++ TSI
++ Aresols
+
+### Understanding the model
+
+Current scientific opinion is that nitrous oxide and CFC-11 are greenhouse gases: gases that are able to trap heat from the sun and contribute to the heating of the Earth. However, the regression coefficients of both the N2O and CFC-11 variables are negative, indicating that increasing atmospheric concentrations of either of these two compounds is associated with lower global temperatures.
+
+The simplest and correct explanation:
+**All of the gas concentration variables reflect human development - N2O and CFC.11 are correlated with other variables in the data set.**
+
+Let's compute the correlations between all the variables in the training set.
+
+```{r}
+cor(train)
+```
+
+Varaibles which are highly correlated with N2O:
+
++ CO2
++ CH4
++ CFC.12
+
+Variables which are highly correlated with CFC.11:
+
++ CH4
++ CFC.12
+
+### Simplifying model
+
+Given that the correlations are so high, let focus on the N2O variable and build a model with only MEI, TSI, Aerosols and N2O as independent variables.
+
+```{r}
+simplModel <- lm(Temp ~ MEI + TSI + Aerosols + N2O, data=train)
+summary(simplModel)
+```
+
+Now we have much more interpretable model compare to previous one. R-squared decrease a little, from 0.75 to 0.72.
+
+### Automatically build the model
+
+We have many variables in this problem, and as we have seen above, dropping some from the model does not decrease model quality. For model quality estimation with penalty for number of variables I'm going to use Akaike information criterion.
+
+```{r}
+library(MASS)
+autoModel <- stepAIC(firstModel, scope=list(upper=~MEI + CO2 + CH4 + N2O + CFC.11 + CFC.12 + TSI + Aerosols, lower = ~1), trace = FALSE)
+summary(autoModel)
+```
+
+It is interesting to note that the step function does not address the collinearity of the variables.  Variable CH4 were eliminated from model by stepAIC function.
+
+### Testing on unseen data
+
+Step model:
+```{r}
+autoPred <- predict(autoModel, test)
+SSE = sum((test$Temp - autoPred)^2)
+SST = sum((test$Temp - mean(train$Temp))^2)
+1 - SSE/SST
+```
+
+Full model:
+```{r}
+fullPred <- predict(firstModel, test)
+SSE = sum((test$Temp - fullPred)^2)
+SST = sum((test$Temp - mean(train$Temp))^2)
+1 - SSE/SST
+```
+
+Simplified model:
+```{r}
+simplPred <- predict(simplModel, test)
+SSE = sum((test$Temp - simplPred)^2)
+SST = sum((test$Temp - mean(train$Temp))^2)
+1 - SSE/SST
+```
+
+Nice to see that step function gives us the best model.
